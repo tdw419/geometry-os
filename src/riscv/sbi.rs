@@ -432,9 +432,9 @@ mod tests {
         let mut sbi = Sbi::new();
         let mut uart = Uart::new();
         let mut clint = Clint::new();
-        // SBI v0.2 console putchar: a7=0x02, a6=0, a0=char
+        // Legacy SBI console putchar: a7=1, a0=char
         let result = sbi.handle_ecall(
-            SBI_CONSOLE_GETCHAR,
+            SBI_CONSOLE_PUTCHAR,
             0,
             b'X' as u32,
             0,

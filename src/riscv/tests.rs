@@ -1173,12 +1173,24 @@ fn test_surface_direct_read() {
         uart_str
     );
 
-    // Should read count correctly
+    // Should read count correctly (depends on files in .geometry_os/fs/)
     assert!(
-        uart_str.contains("test: count=4"),
-        "Expected count=4, got: {:?}",
+        uart_str.contains("test: count="),
+        "Expected count line, got: {:?}",
         uart_str
     );
+    // Verify count matches vfs_list result
+    let count_str = uart_str.lines()
+        .find(|l| l.starts_with("test: count="))
+        .and_then(|l| l.strip_prefix("test: count="))
+        .and_then(|v| v.parse::<u32>().ok())
+        .expect("should parse count");
+    let list_str = uart_str.lines()
+        .find(|l| l.starts_with("test: vfs_list returned "))
+        .and_then(|l| l.strip_prefix("test: vfs_list returned "))
+        .and_then(|v| v.parse::<u32>().ok())
+        .expect("should parse vfs_list count");
+    assert_eq!(count_str, list_str, "surface count should match vfs_list count");
 
     // Should read first entry (non-zero)
     assert!(

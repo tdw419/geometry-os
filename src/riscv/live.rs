@@ -448,8 +448,8 @@ mod tests {
             other => panic!("expected Halted status, got: {:?}", other),
         }
 
-        // Shutdown
-        control_tx.send(ThreadControl::Shutdown).unwrap();
+        // Shutdown (may fail if thread already exited after reporting Halted)
+        let _ = control_tx.send(ThreadControl::Shutdown);
         handle.join().expect("thread should join cleanly");
     }
 
