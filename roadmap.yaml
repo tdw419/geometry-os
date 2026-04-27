@@ -8167,7 +8167,7 @@ phases:
   test_target: 1574
 - id: phase-162
   title: Terminal Polish -- Scrollback and Visual Refinements
-  status: in_progress
+  status: done
   goal: Make the terminal feel like a real terminal emulator, not a demo
   description: Scrollback buffer (PageUp/PageDown), better color rendering, cursor
     improvements (blinking, block/underline toggle), and smooth scrolling.
@@ -8175,39 +8175,37 @@ phases:
   - name: Scrollback buffer with PageUp/PageDown
     description: Ring buffer of 1000+ past lines. PageUp enters scrollback, PageDown
       toward live, any key exits.
-    status: todo
+    status: done
     tasks:
     - id: p162.d1.t1
       title: Ring buffer for terminal history (1000 lines)
-      status: todo
+      status: done
       description: Ring buffer for terminal history (1000 lines)
     - id: p162.d1.t2
       title: PageUp/PageDown scroll navigation
-      status: todo
+      status: done
       description: PageUp/PageDown scroll navigation
     - id: p162.d1.t3
       title: Visual indicator when in scrollback mode
-      status: todo
+      status: done
       description: Visual indicator when in scrollback mode
     scope_lines: 300
   - name: Cursor improvements
     description: Blinking cursor, block/underline/bar toggle via Ctrl+click, cursor
       color matches terminal theme.
-    status: todo
+    status: done
     tasks:
     - id: p162.d2.t1
       title: Blinking cursor (toggle every 500ms)
-      status: todo
+      status: done
       description: Blinking cursor (toggle every 500ms)
     - id: p162.d2.t2
       title: Block vs underline cursor style toggle
-      status: todo
+      status: done
       description: Block vs underline cursor style toggle
     scope_lines: 200
   scope_lines_total: 570
   test_target: 10
-  _claimed_by: worker-0
-  _claimed_at: 1777258614
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0
