@@ -407,7 +407,7 @@ phases:
   - Premature extraction -- only extract when the third program actually needs it
 - id: phase-E
   title: Legacy Roadmap Reconciliation
-  status: future
+  status: complete
   goal: Triage roadmap.yaml (163 phases) against SPEC, demote/retire phases that don't
     fit
   description: 'The legacy roadmap.yaml has 163 phases spanning the full Geometry
@@ -428,26 +428,28 @@ phases:
       needed. Produce a reconciliation report.
 
       '
-    status: todo
+    status: done
     acceptance_criteria:
     - description: Every phase in roadmap.yaml has an accurate status
       validation: roadmap validate passes, statuses match codebase
-      met: false
+      met: true
     tasks:
     - id: e.1.1
       title: Audit roadmap.yaml against codebase
-      status: todo
-      description: 'Use roadmap audit workflow (see skill). Compare meta block against
-        actual opcode count, test count, LOC, program count. Update statuses.
+      status: done
+      description: 'Meta block updated (opcodes: 187, tests: 2407, loc: 83836, programs: 156).
+        9 TODO phases marked superseded (142-145, 147-148, 150-152). 2 TODO phases
+        marked deferred (146, 149). Report at docs/LEGACY_ROADMAP_RECONCILIATION.md.
 
         '
       files:
       - roadmap.yaml
     - id: e.1.2
       title: Produce reconciliation report
-      status: todo
-      description: 'Summary: how many phases complete, how many superseded, how many
-        still relevant. Identify gaps between roadmap.yaml and roadmap_v2.yaml.
+      status: done
+      description: 'Report written to docs/LEGACY_ROADMAP_RECONCILIATION.md.
+        31 done, 9 superseded, 2 deferred, 7 planned, 1 research.
+        Gap analysis between roadmap.yaml and roadmap_v2.yaml documented.
 
         '
       files:

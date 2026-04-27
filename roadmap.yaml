@@ -34,14 +34,16 @@ global_risks:
 meta:
   gui: minifb
   hypervisor: true
-  integration_tests: 2182
+  integration_tests: 1619
   language: Rust
-  lib_tests: 1474
-  loc: 76635
-  opcodes: 154
-  programs: 147
+  lib_tests: 788
+  loc: 83836
+  opcodes: 187
+  programs: 156
   ram: 65536 words
   registers: 32
+  total_tests: 2407
+  riscv_examples: 13
   riscv_guest: true
   screen: 256x256 pixels
   source_files: 92
@@ -7192,7 +7194,7 @@ phases:
   test_target: 495
 - id: phase-142
   title: Sprite Sheet Editor
-  status: todo
+  status: superseded
   goal: 'An interactive sprite editor that lets users draw 8x8 or 16x16 pixel sprites
     on a grid, save them to RAM, and preview them with the SPRITE opcode.
 
@@ -7225,7 +7227,7 @@ phases:
   test_target: 500
 - id: phase-143
   title: Sound Synthesizer
-  status: todo
+  status: superseded
   goal: 'A music synthesizer that plays melodies using the BEEP opcode with an interactive
     piano keyboard and pre-loaded songs.
 
@@ -7258,7 +7260,7 @@ phases:
   test_target: 505
 - id: phase-144
   title: Memory Hex Editor
-  status: todo
+  status: superseded
   goal: 'A hex editor for VM RAM that lets users view and modify any memory address,
     with ASCII preview, address jumping, and search functionality.
 
@@ -7290,7 +7292,7 @@ phases:
   test_target: 510
 - id: phase-145
   title: File Manager App
-  status: todo
+  status: superseded
   goal: 'A visual file manager that lists VFS files, shows file sizes, and can load/run
     programs from the programs/ directory.
 
@@ -7322,7 +7324,7 @@ phases:
   test_target: 515
 - id: phase-146
   title: Performance Benchmark Suite
-  status: todo
+  status: deferred
   goal: 'A benchmarking program that measures VM performance across opcode categories
     and displays results as a bar chart.
 
@@ -7354,7 +7356,7 @@ phases:
   test_target: 520
 - id: phase-147
   title: Paint Application
-  status: todo
+  status: superseded
   goal: 'A full drawing application with brush sizes, shapes, undo, and color picker.
 
     '
@@ -7386,7 +7388,7 @@ phases:
   test_target: 525
 - id: phase-148
   title: Chat Bot Terminal
-  status: todo
+  status: superseded
   goal: 'An interactive chat interface that connects to the Hermes LLM agent and displays
     responses as they stream in.
 
@@ -7419,7 +7421,7 @@ phases:
   test_target: 530
 - id: phase-149
   title: RISC-V Assembly Viewer
-  status: todo
+  status: deferred
   goal: 'A RISC-V instruction decoder that takes hex words and shows the decoded instruction
     with register names and immediate values.
 
@@ -7451,7 +7453,7 @@ phases:
   test_target: 535
 - id: phase-150
   title: Screen Recorder
-  status: todo
+  status: superseded
   goal: 'A screen recording tool that captures VM frames and saves them as a replayable
     sequence.
 
@@ -7484,7 +7486,7 @@ phases:
   test_target: 540
 - id: phase-151
   title: Thread Pool Manager
-  status: todo
+  status: superseded
   goal: 'A process pool manager that maintains N worker processes and dispatches tasks
     to them via IPC pipes.
 
@@ -7517,7 +7519,7 @@ phases:
   test_target: 545
 - id: phase-152
   title: QR Code Generator
-  status: todo
+  status: superseded
   goal: 'Generate and display QR codes on the VM screen from text input, encoding
     data as black/white pixel modules.
 
@@ -8378,3 +8380,59 @@ version: 1.0.0
       scope_lines: 30
   scope_lines_total: 100
   test_target: 3
+
+- id: phase-170
+  title: "Fix Windowed Apps Crashing After Phase-169 Base Address Fix"
+  status: planned
+  goal: "All desktop apps should survive as windowed processes, not just 4 out of 10"
+  description: "After phase-169 fixed the assembly base address bug, some windowed apps now work (plasma, painter, fire, file_browser survive in window_list) but 6 apps still crash immediately: snake, ball, tetris, smart_term, oracle, hex_viewer all show empty window_list after launch. The crashing apps all launch fine non-windowed (running=true). The surviving apps tend to be simpler (plasma is just math/pixel ops, fire is a simple effect, painter is drawing, file_browser is UI). The crashing apps may use more complex features: snake uses keyboard input (IKEY) and STORE to 0x2000+ addresses, ball uses IKEY for WASD controls, tetris uses IKEY and memory-mapped I/O, smart_term uses terminal I/O syscalls, oracle uses AI interaction, hex_viewer uses file I/O. The scheduler runs one step() per process per scheduling round and marks the process as Zombie when step() returns false. Need to determine exactly which instruction in each crashing app causes the halt — likely a syscall or I/O opcode that returns false in the process context."
+  deliverables:
+  - name: "All 10 tested windowed apps survive in window_list"
+    description: "snake, ball, plasma, painter, fire, tetris, smart_term, oracle, file_browser, hex_viewer should all appear in window_list after 'launch <app> --window' with a 1-second wait. Currently only plasma, painter, fire, file_browser survive."
+    status: todo
+    tasks:
+    - id: p170.d1.t1
+      title: "Add debug logging to scheduler step for windowed app crashes"
+      status: todo
+      description: "In scheduler.rs step_all_processes(), when step() returns false and the process becomes Zombie, log the process name, PC, opcode at PC, and registers. This will reveal exactly which instruction causes each app to halt. Add this as a conditional log (behind a debug flag) so it doesn't spam in production."
+      scope_lines: 30
+    - id: p170.d1.t2
+      title: "Fix snake windowed crash — likely IKEY or STORE to high addresses"
+      status: todo
+      description: "Snake uses STORE to addresses 0x2000-0x2206 (body buffer, game state) and IKEY for WASD input. When running as a windowed process with page_dir=None (identity mapping), these should work. Check if IKEY returns a special value or if there's a RAM bounds check that fails. The process has no page_dir so translate_va uses identity mapping — all 64K RAM should be accessible. The crash likely happens when snake calls IKEY and the opcode handler returns false (causing step() to return false, causing the scheduler to mark the process as Zombie)."
+      scope_lines: 60
+    - id: p170.d1.t3
+      title: "Fix ball windowed crash — IKEY related"
+      status: todo
+      description: "Ball uses IKEY for WASD controls and runs fine non-windowed. As a windowed process, the IKEY opcode handler at ops_graphics.rs:197-215 reads from key_buffer or key_port. Check if IKEY returns false (halting the process) when the key buffer is empty in process context. The opcode comment says 'Returns false if halted (user-mode IKEY)' which suggests IKEY can cause a halt in user mode."
+      scope_lines: 40
+    - id: p170.d1.t4
+      title: "Fix tetris, smart_term, oracle, hex_viewer windowed crashes"
+      status: todo
+      description: "After fixing snake and ball, investigate the remaining crashing apps. These may use different opcodes (EXEC, SLEEP, WAITPID for init-like apps, or file I/O for hex_viewer). Each app's first few instructions should be traced to find the crash point."
+      scope_lines: 80
+  scope_lines_total: 210
+  test_target: 4
+
+- id: phase-171
+  title: "Fix Window Title RAM Not Zeroed on First Windowed Launch"
+  status: planned
+  goal: "Window titles should always show the clean app name, not stale bytes from previous sessions"
+  description: "Dogfood QA found that the first windowed launch of 'plasma' shows title 'plasmaX<' instead of 'plasma'. The second launch shows the correct 'plasma'. The title is stored at RAM address 0x7900 + slot*32, and the windowed launch code writes the app name bytes but does NOT null-terminate or zero-fill the 32-byte title region first. If the previous session left stale bytes at 0x7900+5 (where 'X' and '<' are), those get concatenated with the new title. The fix is to zero the 32-byte title region before writing the app name, or write a null terminator after the name."
+  deliverables:
+  - name: "Window titles always show clean app name"
+    description: "After fresh start, first windowed launch of any app should show the correct title in window_list. The 32-byte title region at 0x7900+slot*32 must be zeroed before writing the app name bytes."
+    status: todo
+    tasks:
+    - id: p171.d1.t1
+      title: "Zero title RAM region before writing app name in windowed launch"
+      status: todo
+      description: "In main.rs around line 2708 where title_base is computed and app_name bytes are written, add a loop to zero all 32 words at title_base..title_base+32 before writing the app name bytes. This ensures no stale bytes from previous sessions or other apps remain. Alternatively, add a null terminator write after the name bytes: vm.ram[title_base + app_name.len()] = 0."
+      scope_lines: 20
+    - id: p171.d1.t2
+      title: "Verify first-launch titles are clean for all apps"
+      status: todo
+      description: "After fix, test: (1) start fresh GeOS, (2) launch plasma --window, (3) check window_list shows title 'plasma' not 'plasmaX<' or any garbled text. Repeat for snake, ball, fire, painter, file_browser. Then close all windows and re-launch to ensure the fix doesn't break subsequent launches."
+      scope_lines: 20
+  scope_lines_total: 40
+  test_target: 2
