@@ -8,11 +8,18 @@
 // Currently implements:
 // - SBI v0.1 legacy console (putchar/getchar)
 // - SBI v0.2 base (get_sbi_spec_version, get_sbi_impl_id, etc.)
-// - SBI v0.2 console putchar (console_write_byte)
 // - SBI v0.2 hart state (hart_start, hart_stop)
 // - SBI v0.2 system reset (shutdown, reboot)
 // - SBI v0.2 timer (set_timer)
 // - HTIF tohost/fromhost memory-mapped writes (silently accepted)
+//
+// COMPATIBILITY NOTE: We do NOT support SBI v0.2 extension 0x02 (console
+// putchar). The extension ID 0x02 collides with legacy a7=2 (console getchar)
+// at the same numeric value. Our bare-metal guest programs use legacy a7=1
+// for putchar and a7=2 for getchar. Linux earlycon=sbi uses extension 0x02
+// with a6=0 for putchar, which would be misrouted to getchar. If Linux boot
+// support is ever needed, the SBI dispatch must be restructured to separate
+// legacy (a7 < 0x10, no a6) from extension (a7 >= 0x10, uses a6) namespaces.
 
 use super::uart::Uart;
 
