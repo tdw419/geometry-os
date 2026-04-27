@@ -61,21 +61,21 @@ phases:
         tasks: []
       - name: "Half-word bus routing for MMIO framebuffer"
         description: >
-          Half-word (16-bit) writes to 0x6000_0000 currently fall through to RAM
-          instead of routing to the framebuffer. Will silently corrupt if guest
-          uses memcpy or RGBA565 packing.
-        status: "todo"
+          Half-word and byte writes now route to all MMIO devices (UART, PLIC,
+          virtio, VFS surface, framebuffer) instead of falling through to RAM.
+          Uses read-modify-write at word granularity. 5 unit tests pass.
+        status: "done"
         acceptance_criteria:
           - description: "16-bit write to framebuffer address stored correctly"
             validation: "Unit test: write 0x1234 to FB_BASE+0, read back matches"
-            met: false
+            met: true
           - description: "Byte writes to framebuffer also work"
             validation: "Unit test: write 0xFF to FB_BASE+1, read back upper byte is 0xFF"
-            met: false
+            met: true
         tasks:
           - id: "a.3.1"
-            title: "Add half-word routing in bus.rs for framebuffer range"
-            status: "todo"
+            title: "Add half-word routing in bus.rs for all MMIO devices"
+            status: "done"
             description: >
               In bus.rs write_word path, add framebuffer half-word routing similar
               to existing word routing. Also add byte-level write routing.
@@ -83,20 +83,20 @@ phases:
             files: ["src/riscv/bus.rs", "src/riscv/framebuf.rs"]
           - id: "a.3.2"
             title: "Add unit tests for half-word and byte framebuffer access"
-            status: "todo"
+            status: "done"
             description: "Test 16-bit and 8-bit writes/reads to MMIO framebuffer."
             files: ["src/riscv/tests.rs"]
       - name: "Update build.sh stale comment"
-        description: "Comment says 'Geometry OS CPU is RV32I' but interpreter supports RV32IMAC."
-        status: "todo"
+        description: "Comment updated to RV32IMAC + Zicsr with correct source references."
+        status: "done"
         acceptance_criteria:
           - description: "Comment in build.sh mentions RV32IMAC"
             validation: "grep RV32IMAC build.sh returns match"
-            met: false
+            met: true
         tasks:
           - id: "a.4.1"
             title: "Fix comment in build.sh"
-            status: "todo"
+            status: "done"
             description: "Change 'IMPORTANT: Geometry OS CPU is RV32I' to RV32IMAC."
             files: ["examples/riscv-hello/build.sh"]
     technical_notes: >

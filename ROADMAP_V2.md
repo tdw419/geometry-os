@@ -5,15 +5,15 @@ Roadmap for the pixel-native RISC-V hypervisor layer in Geometry OS. Covers tool
 
 **Progress:** 1/5 phases complete, 0 in progress
 
-**Deliverables:** 2/12 complete
+**Deliverables:** 4/12 complete
 
-**Tasks:** 3/20 complete
+**Tasks:** 6/20 complete
 
 ## Scope Summary
 
 | Phase | Status | Deliverables | LOC Target | Tests |
 |-------|--------|-------------|-----------|-------|
-| phase-A Toolchain Hygiene | COMPLETE | 2/4 | - | - |
+| phase-A Toolchain Hygiene | COMPLETE | 4/4 | - | - |
 | phase-B GUI Bridge — Live Pixel Display | PLANNED | 0/3 | - | - |
 | phase-C Pixel VM Convergence | FUTURE | 0/1 | - | - |
 | phase-D Layer 2 — libgeos and Primitives | FUTURE | 0/3 | - | - |
@@ -57,23 +57,23 @@ The interpreter supports RV32IMAC but examples were being compiled with rv32i, f
     _Validation: grep -n '% FB_WIDTH\|* FB_WIDTH' life.c returns nothing_
   - [x] Benchmarks at 50+ MIPS
     _Validation: time sh_run life.elf shows 2-3s for 10 generations_
-- [ ] **Half-word bus routing for MMIO framebuffer** -- Half-word (16-bit) writes to 0x6000_0000 currently fall through to RAM instead of routing to the framebuffer. Will silently corrupt if guest uses memcpy or RGBA565 packing.
+- [x] **Half-word bus routing for MMIO framebuffer** -- Half-word and byte writes now route to all MMIO devices (UART, PLIC, virtio, VFS surface, framebuffer) instead of falling through to RAM. Uses read-modify-write at word granularity. 5 unit tests pass.
 
-  - [ ] `a.3.1` Add half-word routing in bus.rs for framebuffer range
+  - [x] `a.3.1` Add half-word routing in bus.rs for all MMIO devices
     > In bus.rs write_word path, add framebuffer half-word routing similar to existing word routing. Also add byte-level write routing. Check Framebuffer::write() handles sub-word offsets.
     _Files: src/riscv/bus.rs, src/riscv/framebuf.rs_
-  - [ ] `a.3.2` Add unit tests for half-word and byte framebuffer access
+  - [x] `a.3.2` Add unit tests for half-word and byte framebuffer access
     > Test 16-bit and 8-bit writes/reads to MMIO framebuffer.
     _Files: src/riscv/tests.rs_
-  - [ ] 16-bit write to framebuffer address stored correctly
+  - [x] 16-bit write to framebuffer address stored correctly
     _Validation: Unit test: write 0x1234 to FB_BASE+0, read back matches_
-  - [ ] Byte writes to framebuffer also work
+  - [x] Byte writes to framebuffer also work
     _Validation: Unit test: write 0xFF to FB_BASE+1, read back upper byte is 0xFF_
-- [ ] **Update build.sh stale comment** -- Comment says 'Geometry OS CPU is RV32I' but interpreter supports RV32IMAC.
-  - [ ] `a.4.1` Fix comment in build.sh
+- [x] **Update build.sh stale comment** -- Comment updated to RV32IMAC + Zicsr with correct source references.
+  - [x] `a.4.1` Fix comment in build.sh
     > Change 'IMPORTANT: Geometry OS CPU is RV32I' to RV32IMAC.
     _Files: examples/riscv-hello/build.sh_
-  - [ ] Comment in build.sh mentions RV32IMAC
+  - [x] Comment in build.sh mentions RV32IMAC
     _Validation: grep RV32IMAC build.sh returns match_
 
 ### Technical Notes
