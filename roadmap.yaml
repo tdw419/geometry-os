@@ -8439,23 +8439,23 @@ version: 1.0.0
 
 - id: phase-172
   title: "Fix riscv_tests Compilation: StepResult::Shutdown Not Covered"
-  status: planned
+  status: done
   goal: "riscv_tests should compile and all RISC-V tests should pass"
   description: "Dogfood QA found that the test suite fails to compile due to a non-exhaustive pattern match. Commit acc2aa5 added a Shutdown variant to StepResult (enum in src/riscv/cpu/mod.rs:33) but the run_vm() helper in tests/riscv_tests/privilege.rs:733 doesn't handle it. This prevents ALL riscv_tests from running. The fix is trivial: add StepResult::Shutdown to the match arm in run_vm(). The program_tests (490 passed) and lib tests compile fine; only riscv_tests are broken."
   deliverables:
   - name: "Fix non-exhaustive match in privilege.rs run_vm()"
     description: "Add StepResult::Shutdown => break to the match in tests/riscv_tests/privilege.rs:733 run_vm() function, alongside the existing Ok/LoadFault/StoreFault arm. Shutdown should break the loop just like Ecall/Ebreak/FetchFault."
-    status: todo
+    status: done
     tasks:
     - id: p172.d1.t1
       title: "Add StepResult::Shutdown arm to run_vm() match"
-      status: todo
-      description: "In tests/riscv_tests/privilege.rs line 733, change the match to: StepResult::Ecall | StepResult::Ebreak | StepResult::FetchFault | StepResult::Shutdown => break, StepResult::Ok | StepResult::LoadFault | StepResult::StoreFault => {}"
+      status: done
+      description: "In tests/riscv_tests/privilege.rs line 733, changed the match to: StepResult::Ecall | StepResult::Ebreak | StepResult::FetchFault | StepResult::Shutdown => break, StepResult::Ok | StepResult::LoadFault | StepResult::StoreFault => {}"
       scope_lines: 10
     - id: p172.d1.t2
-      title: "Verify all riscv_tests compile and pass"
-      status: todo
-      description: "Run cargo test --test riscv_tests and verify 0 compilation errors and 0 test failures. The test suite had 146 tests passing before the Shutdown variant was added."
+      title: "Fix stale assertion in test_sbi_shutdown_from_smode"
+      status: done
+      description: "Test expected StepResult::Ebreak but SBI handler now correctly returns StepResult::Shutdown. Updated assertion. All 147 riscv_tests pass."
       scope_lines: 10
   scope_lines_total: 20
   test_target: 2
