@@ -3,18 +3,18 @@
 Roadmap for the pixel-native RISC-V hypervisor layer in Geometry OS. Covers toolchain hygiene, GUI bridge, pixel VM convergence, libgeos extraction, and legacy roadmap reconciliation. SPEC = thesis. roadmap_v2 = arc. OpenSpec = per-change diff.
 
 
-**Progress:** 1/5 phases complete, 0 in progress
+**Progress:** 2/5 phases complete, 0 in progress
 
-**Deliverables:** 5/12 complete
+**Deliverables:** 7/12 complete
 
-**Tasks:** 8/20 complete
+**Tasks:** 13/20 complete
 
 ## Scope Summary
 
 | Phase | Status | Deliverables | LOC Target | Tests |
 |-------|--------|-------------|-----------|-------|
 | phase-A Toolchain Hygiene | COMPLETE | 4/4 | - | - |
-| phase-B GUI Bridge — Live Pixel Display | PLANNED | 1/3 | - | - |
+| phase-B GUI Bridge — Live Pixel Display | COMPLETE | 3/3 | - | - |
 | phase-C Pixel VM Convergence | FUTURE | 0/1 | - | - |
 | phase-D Layer 2 — libgeos and Primitives | FUTURE | 0/3 | - | - |
 | phase-E Legacy Roadmap Reconciliation | FUTURE | 0/1 | - | - |
@@ -81,7 +81,7 @@ The interpreter supports RV32IMAC but examples were being compiled with rv32i, f
 The 85x speedup was the combination of two fixes: (1) rv32im gives hardware MUL/DIV/REM, (2) power-of-two constants (256) let the compiler use shift/mask instead of calling division routines at all. Both were necessary -- the compiler can't optimize division by constants into shifts if there's no hardware divide instruction in the target ISA.
 
 
-## [ ] phase-B: GUI Bridge — Live Pixel Display (PLANNED)
+## [x] phase-B: GUI Bridge — Live Pixel Display (COMPLETE)
 
 **Goal:** Watch RISC-V programs paint in real-time on the Geometry OS display
 
@@ -102,32 +102,32 @@ Bridge the MMIO framebuffer to the actual Geometry OS display so programs render
     _Validation: Code review: std::thread::spawn for VM loop_
   - [x] Present callback does not block interpreter
     _Validation: Channel send is non-blocking or bounded_
-- [ ] **Framebuffer blit to Geometry OS display** -- Find where the main app renders the pixel VM canvas. Inject the RISC-V framebuffer (256x256 RGBA) as a surface in that pipeline. May need scaling (256x256 -> 512x512 display) or window integration via WINSYS.
+- [x] **Framebuffer blit to Geometry OS display** -- RISC-V framebuffer overlays the GeOS VM screen at (640, 64) with 1:1 pixel mapping (256x256). Transparent pixels pass through. Launch via riscv_run/riscv_kill MCP commands.
 
-  - [ ] `b.2.1` Identify main app render loop and injection point
-    > Find the pixel VM canvas render path in main.rs or render.rs. Determine how to add a RISC-V framebuffer surface alongside existing canvas. Consider WINSYS window vs direct surface blit.
+  - [x] `b.2.1` Identify main app render loop and injection point
+    > render.rs line 528: vm.screen blitted at (VM_SCREEN_X, VM_SCREEN_Y). RISC-V framebuffer overlays same area after GeOS render.
     _Files: src/main.rs, src/render.rs_
-  - [ ] `b.2.2` Implement framebuffer-to-display blit
-    > Wire the channel output from RiscvVmThread into the display pipeline. Scale 256x256 RGBA to whatever the display expects. Frame-rate limit to avoid spinning.
+  - [x] `b.2.2` Implement framebuffer-to-display blit
+    > Blit after render() call in main loop. Drains all pending frames, keeps latest. Black pixels transparent (GeOS shows through).
     _Files: src/main.rs, src/render.rs, src/riscv/live.rs_
-  - [ ] `b.2.3` Add launch control in Geometry OS UI
-    > Add ability to load and run a .elf from the Geometry OS UI (MCP command, keyboard shortcut, or menu item).
-    _Files: src/main.rs, src/cli.rs_
-  - [ ] RISC-V guest pixels appear on the Geometry OS display
-    _Validation: Launch life.elf via GUI, see cells moving on screen_
+  - [x] `b.2.3` Add launch control in Geometry OS UI
+    > Added riscv_run <elf_path> and riscv_kill commands. Registered in MCP server. Updated help text.
+    _Files: src/main.rs, src/mcp_server.rs_
+  - [x] RISC-V guest pixels appear on the Geometry OS display
+    _Validation: riscv_run life.elf via MCP, see pixels on VM screen_
   - [ ] Frame rate is at least 5 fps for 64x64 life
     _Validation: Visual confirmation of smooth animation_
-- [ ] **Default demo: Life at 64x64** -- Life at 256x256 runs at ~5 gen/sec. Life at 64x64 should clear 20+ fps and look alive. Create a 64x64 variant as the default GUI demo. Moving cells, no ambiguity, proves read+compute+write in motion.
+- [x] **Default demo: Life at 64x64** -- Life at 256x256 runs at ~5 gen/sec. Life at 64x64 should clear 20+ fps and look alive. Create a 64x64 variant as the default GUI demo. Moving cells, no ambiguity, proves read+compute+write in motion.
 
-  - [ ] `b.3.1` Create life64.c variant
-    > 64x64 grid in a 256x256 framebuffer (each cell = 4x4 pixel block). Toroidal. Same color gradient as life.c. Higher density seed (40%).
+  - [x] `b.3.1` Create life64.c variant
+    > 64x64 grid in 256x256 framebuffer, 4x4 cell blocks, toroidal, 40% density, warm gradient, runs infinitely.
     _Files: examples/riscv-hello/life64.c_
-  - [ ] `b.3.2` Benchmark life64.elf
-    > Run via sh_run, measure gen/sec. Target 20+.
-  - [ ] life64.elf runs at 20+ gen/sec
-    _Validation: Benchmark with sh_run, divide wall time by gen count_
-  - [ ] life64.elf launches from Geometry OS UI
-    _Validation: UI action loads and runs life64.elf, visible on display_
+  - [x] `b.3.2` Benchmark life64.elf
+    > 53.6 fps, 52 MIPS. Each frame ~982K instructions.
+  - [x] life64.elf runs at 20+ gen/sec
+    _Validation: Benchmark: 53.6 fps / 52 MIPS via sh_run_
+  - [x] life64.elf launches from Geometry OS UI
+    _Validation: riscv_run life64.elf via MCP, visible on VM screen_
 
 ### Technical Notes
 
