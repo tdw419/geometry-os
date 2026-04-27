@@ -7799,7 +7799,7 @@ phases:
   _claimed_at: 1777240246
 - id: phase-159
   title: Terminal Daily Driver -- Fullscreen Scaling and Font Sizes
-  status: in_progress
+  status: done
   goal: Dynamically scale the 256x256 canvas to fill the monitor. Switch between SMALLTEXT
     (80 cols) and MEDTEXT (42 cols) at runtime. Zoom in/out.
   description: The terminal is 256x256 pixels but monitors are 1920x1080+. Scale the
@@ -7810,28 +7810,26 @@ phases:
     description: 'F1: switch to MEDTEXT (larger font, 42 cols, more readable). F2:
       switch to SMALLTEXT (small font, 80 cols, standard). Both modes re-render the
       current terminal content. minifb window scales to monitor size.'
-    status: todo
+    status: done
     tasks:
     - id: p159.d1.t1
       title: F1/F2 runtime font size toggle
-      status: todo
+      status: done
       description: Switch font renderer between SMALLTEXT and MEDTEXT. Re-render visible
         buffer in new font.
     - id: p159.d1.t2
       title: Notify PTY of column change (resize)
-      status: todo
+      status: done
       description: When switching fonts, send SIGWINCH to bash with new window size.
         Bash reflows output.
     - id: p159.d1.t3
       title: 'Fullscreen mode: scale 256x256 to monitor resolution'
-      status: todo
+      status: done
       description: Use minifb's window size or fullscreen API to scale the pixel buffer
         to the actual monitor size.
     scope_lines: 200
   scope_lines_total: 77300
   test_target: 5
-  _claimed_by: worker-0
-  _claimed_at: 1777252590
 - id: phase-160
   title: Native RISC-V Linux Boot to Userspace
   status: in_progress
@@ -8110,7 +8108,7 @@ phases:
   - 21 ECALLs in 20M instructions looked like a hang but was actually the kernel creating
     page tables. Sampling PCs revealed create_pgd_mapping loop.
   _claimed_by: worker-0
-  _claimed_at: 1777252599
+  _claimed_at: 1777256886
 - id: phase-161
   title: Fix CLINT MTIP Regression in sync_mip (3 Failing Tests)
   status: in_progress
@@ -8168,7 +8166,7 @@ phases:
   scope_lines_total: 70
   test_target: 1574
   _claimed_by: worker-0
-  _claimed_at: 1777252766
+  _claimed_at: 1777257264
 - id: phase-162
   title: Terminal Polish -- Scrollback and Visual Refinements
   status: in_progress

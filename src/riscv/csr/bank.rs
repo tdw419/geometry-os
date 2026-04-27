@@ -94,6 +94,7 @@ impl CsrBank {
     pub fn read(&self, addr: u32) -> u32 {
         match addr {
             MSTATUS => self.mstatus,
+            MISA => MISA_RV32I, // Read-only: reports RV32I
             MTVEC => self.mtvec,
             MEPC => self.mepc,
             MCAUSE => self.mcause,
@@ -120,6 +121,10 @@ impl CsrBank {
     /// Returns false if the CSR address is unrecognized or not writable.
     pub fn write(&mut self, addr: u32, val: u32) -> bool {
         match addr {
+            MISA => {
+                // Read-only; ignore writes (spec says WARL: writes ignored)
+                true
+            }
             MSTATUS => {
                 self.mstatus = val;
                 true

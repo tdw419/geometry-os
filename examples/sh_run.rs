@@ -171,4 +171,30 @@ fn main() {
 
     eprintln!("\nTotal instructions: {}", total_instructions);
     eprintln!("Final PC: 0x{:08X}", vm.cpu.pc);
+
+    // Dump pixel framebuffer if the guest wrote any pixels
+    use geometry_os::riscv::sbi::{GEO_FB_WIDTH, GEO_FB_HEIGHT};
+    let fb = &vm.bus.sbi.pixel_fb;
+    let any_nonzero = fb.iter().any(|&p| p != 0);
+    if any_nonzero {
+        let out_path = "painter_output.png";
+        let file = std::fs::File::create(out_path).expect("create png");
+        let mut encoder = png::Encoder::new(file, GEO_FB_WIDTH as u32, GEO_FB_HEIGHT as u32);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().expect("png header");
+        // Convert from u32 ARGB to RGBA bytes
+        let mut rgba = vec![0u8; GEO_FB_WIDTH * GEO_FB_HEIGHT * 4];
+        for (i, &pixel) in fb.iter().enumerate() {
+            // pixel format: 0xRRGGBBAA (as set by rgb() in painter.c)
+            // Actually it's whatever the guest wrote -- interpret as bytes
+            let bytes = pixel.to_be_bytes();
+            rgba[i * 4 + 0] = bytes[0]; // R
+            rgba[i * 4 + 1] = bytes[1]; // G
+            rgba[i * 4 + 2] = bytes[2]; // B
+            rgba[i * 4 + 3] = bytes[3]; // A
+        }
+        writer.write_image_data(&rgba).expect("write png");
+        eprintln!("Pixel framebuffer saved to {}", out_path);
+    }
 }

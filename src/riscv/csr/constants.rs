@@ -6,6 +6,7 @@
 // ---- CSR address constants ----
 
 pub const MSTATUS: u32 = 0x300;
+pub const MISA: u32 = 0x301;
 pub const MTVEC: u32 = 0x305;
 pub const MEPC: u32 = 0x341;
 pub const MCAUSE: u32 = 0x342;
@@ -58,6 +59,11 @@ pub const MSTATUS_MPP_MASK: u32 = 0x3 << 11;
 
 /// Trap cause: top bit = interrupt (1) or exception (0), lower 31 bits = code.
 pub const MCAUSE_INTERRUPT_BIT: u32 = 1 << 31;
+
+/// MISA register value for RV32I (no extensions, XLEN=32).
+/// Bit 8 = I extension, bit 30 = XLEN=32 (MXL field = 0b01 << 30).
+/// Value: (1 << 30) | (1 << 8) = 0x4000_0100.
+pub const MISA_RV32I: u32 = (1 << 30) | (1 << 8);
 
 /// Exception codes (lower bits of mcause/scause).
 pub const CAUSE_MISALIGNED_FETCH: u32 = 0;

@@ -50,13 +50,23 @@ const SBI_DBCN_CONSOLE_READ: u32 = 1;
 const SBI_DBCN_CONSOLE_WRITE_BYTE: u32 = 2;
 
 // Geometry OS-specific SBI extension. EID is ASCII "GEO\0".
-// Function 0: GEO_VFS_READ(name_ptr, name_len, buf_ptr, buf_len) -> bytes_read
-//   Reads the file identified by the UTF-8 path at guest addr [name_ptr, name_ptr+name_len)
-//   from the Geometry OS VFS (base: $PWD/.geometry_os/fs). Copies up to buf_len bytes
-//   into guest addr [buf_ptr, buf_ptr+buf_len). Returns bytes actually copied in a0,
-//   or SBI_ERR_INVALID_PARAM / SBI_ERR_FAILURE on bad name / missing file.
+// Function 0: GEO_VFS_READ (DEPRECATED -- use Pixel VFS Surface at 0x7000_0000)
+// Function 1: GEO_PIXEL_SET(x, y, color) -- set pixel in framebuffer
+//   a0 = x (0..63), a1 = y (0..63), a2 = RGBA color (0xRRGGBBAA, alpha ignored)
+//   Returns SBI_SUCCESS or SBI_ERR_INVALID_PARAM if out of bounds.
+// Function 2: GEO_PIXEL_PRESENT() -- flush framebuffer to display
+//   Returns SBI_SUCCESS.
+// Function 3: GEO_PIXEL_GET_INFO() -- return framebuffer dimensions
+//   Returns (a0=width, a1=height).
 const SBI_EXT_GEOMETRY: u32 = 0x47454F00; // "GEO\0"
 const GEO_FN_VFS_READ: u32 = 0;
+const GEO_FN_PIXEL_SET: u32 = 1;
+const GEO_FN_PIXEL_PRESENT: u32 = 2;
+const GEO_FN_PIXEL_GET_INFO: u32 = 3;
+
+/// Framebuffer dimensions for the SBI pixel extension.
+pub const GEO_FB_WIDTH: usize = 64;
+pub const GEO_FB_HEIGHT: usize = 64;
 
 /// Pending GEO_VFS_READ request: set by handle_ecall, fulfilled by the caller
 /// which has access to guest memory. The caller reads the filename bytes from
@@ -96,6 +106,11 @@ pub struct Sbi {
     /// Retained for struct compatibility. Will be removed in a future version.
     #[deprecated(note = "Use Pixel VFS Surface")]
     pub geo_vfs_read_pending: Option<GeoVfsReadReq>,
+    /// SBI pixel extension framebuffer (64x64 RGBA).
+    /// Written by GEO_PIXEL_SET, flushed by GEO_PIXEL_PRESENT.
+    pub pixel_fb: Vec<u32>,
+    /// True if pixel_fb has been presented (flushed) since last present.
+    pub pixel_presented: bool,
 }
 
 impl Sbi {
@@ -110,6 +125,8 @@ impl Sbi {
             dbcn_pending_write: None,
             dbcn_pending_read: None,
             geo_vfs_read_pending: None,
+            pixel_fb: vec![0u32; GEO_FB_WIDTH * GEO_FB_HEIGHT],
+            pixel_presented: false,
         }
     }
 
@@ -235,6 +252,7 @@ impl Sbi {
                                 | SBI_EXT_RFENCE
                                 | SBI_EXT_IPI
                                 | SBI_EXT_DBCN
+                                | SBI_EXT_GEOMETRY
                         );
                         Some((0, if available { 1 } else { 0 }))
                     }
@@ -350,6 +368,21 @@ impl Sbi {
                     );
                     Some((SBI_ERR_NOT_SUPPORTED as u32, 0))
                 }
+                GEO_FN_PIXEL_SET => {
+                    // a0 = x, _a1 = y, _a2 = RGBA color
+                    let x = a0 as usize;
+                    let y = _a1 as usize;
+                    if x >= GEO_FB_WIDTH || y >= GEO_FB_HEIGHT {
+                        return Some((SBI_ERR_INVALID_PARAM as u32, 0));
+                    }
+                    self.pixel_fb[y * GEO_FB_WIDTH + x] = _a2;
+                    Some((SBI_SUCCESS as u32, 0))
+                }
+                GEO_FN_PIXEL_PRESENT => {
+                    self.pixel_presented = true;
+                    Some((SBI_SUCCESS as u32, 0))
+                }
+                GEO_FN_PIXEL_GET_INFO => Some((GEO_FB_WIDTH as u32, GEO_FB_HEIGHT as u32)),
                 _ => Some((SBI_ERR_NOT_SUPPORTED as u32, 0)),
             },
             _ => None, // Not an SBI call
