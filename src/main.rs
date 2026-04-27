@@ -2623,17 +2623,21 @@ fn main() {
                                         Ok(source) => {
                                             let mut pp = crate::preprocessor::Preprocessor::new();
                                             let preprocessed = pp.preprocess(&source);
-                                            match crate::assembler::assemble(&preprocessed, 0) {
-                                                Ok(asm_result) => {
-                                                    // Find a free app slot
-                                                    let used_slots: Vec<usize> =
-                                                        active_apps.iter().map(|a| a.0).collect();
-                                                    let slot = (0..MAX_WINDOWED_APPS)
-                                                        .find(|s| !used_slots.contains(s));
+                                            // Find a free app slot BEFORE assembling so we can
+                                            // pass the correct base_addr for label resolution
+                                            let used_slots: Vec<usize> =
+                                                active_apps.iter().map(|a| a.0).collect();
+                                            let slot = (0..MAX_WINDOWED_APPS)
+                                                .find(|s| !used_slots.contains(s));
 
-                                                    if let Some(slot_idx) = slot {
-                                                        let app_base = APP_CODE_BASE
-                                                            + slot_idx * APP_CODE_SIZE;
+                                            if let Some(slot_idx) = slot {
+                                                let app_base =
+                                                    APP_CODE_BASE + slot_idx * APP_CODE_SIZE;
+                                                match crate::assembler::assemble(
+                                                    &preprocessed,
+                                                    app_base,
+                                                ) {
+                                                    Ok(asm_result) => {
                                                         let ram_len = vm.ram.len();
 
                                                         // Clear app code region
@@ -2750,18 +2754,17 @@ fn main() {
                                                             "[windowed: {} PID={} slot={} win={}]\n",
                                                             app_name, pid, slot_idx, win_id
                                                         ));
-                                                    } else {
-                                                        response.push_str(
-                                                            "[max apps: close a window first]\n",
-                                                        );
+                                                    }
+                                                    Err(e) => {
+                                                        response.push_str(&format!(
+                                                            "[assembly error for {}: {}]\n",
+                                                            app_name, e
+                                                        ));
                                                     }
                                                 }
-                                                Err(e) => {
-                                                    response.push_str(&format!(
-                                                        "[assembly error for {}: {}]\n",
-                                                        app_name, e
-                                                    ));
-                                                }
+                                            } else {
+                                                response
+                                                    .push_str("[max apps: close a window first]\n");
                                             }
                                         }
                                         Err(e) => {
@@ -4408,20 +4411,21 @@ fn main() {
                                                 let mut pp =
                                                     crate::preprocessor::Preprocessor::new();
                                                 let preprocessed = pp.preprocess(&source);
-                                                // Assemble at address 0 (relocatable)
-                                                match crate::assembler::assemble(&preprocessed, 0) {
-                                                    Ok(asm_result) => {
-                                                        // Find a free app slot
-                                                        let used_slots: Vec<usize> = active_apps
-                                                            .iter()
-                                                            .map(|a| a.0)
-                                                            .collect();
-                                                        let slot = (0..MAX_WINDOWED_APPS)
-                                                            .find(|s| !used_slots.contains(s));
+                                                // Find a free app slot BEFORE assembling so we can
+                                                // pass the correct base_addr for label resolution
+                                                let used_slots: Vec<usize> =
+                                                    active_apps.iter().map(|a| a.0).collect();
+                                                let slot = (0..MAX_WINDOWED_APPS)
+                                                    .find(|s| !used_slots.contains(s));
 
-                                                        if let Some(slot_idx) = slot {
-                                                            let app_base = APP_CODE_BASE
-                                                                + slot_idx * APP_CODE_SIZE;
+                                                if let Some(slot_idx) = slot {
+                                                    let app_base =
+                                                        APP_CODE_BASE + slot_idx * APP_CODE_SIZE;
+                                                    match crate::assembler::assemble(
+                                                        &preprocessed,
+                                                        app_base,
+                                                    ) {
+                                                        Ok(asm_result) => {
                                                             let ram_len = vm.ram.len();
 
                                                             // Clear app code region
@@ -4506,15 +4510,15 @@ fn main() {
                                                                 "[WINDOWED: {} PID={} slot={}]",
                                                                 app_name, pid, slot_idx
                                                             );
-                                                        } else {
+                                                        }
+                                                        Err(e) => {
                                                             status_msg =
-                                                                "[MAX APPS: close a window first]"
-                                                                    .into();
+                                                                format!("[asm error: {}]", e);
                                                         }
                                                     }
-                                                    Err(e) => {
-                                                        status_msg = format!("[asm error: {}]", e);
-                                                    }
+                                                } else {
+                                                    status_msg =
+                                                        "[MAX APPS: close a window first]".into();
                                                 }
                                             }
                                             Err(e) => {

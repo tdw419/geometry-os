@@ -476,19 +476,19 @@ phases:
       three bugs that were fixed: channel leaking, cursor overwrite, fill-mode position.
 
       '
-    status: todo
+    status: done
     acceptance_criteria:
     - description: Test asserts 10 red + 10 blue + 10 green + 11 yellow pixels at
         expected coords
       validation: Run test script, exit 0 on correct output, exit 1 on pixel mismatch
-      met: false
+      met: true
     - description: Test catches at least one of the three known paint.c bugs if reverted
       validation: Revert a fix, run test, expect failure
-      met: false
+      met: true
     tasks:
     - id: f.1.1
       title: Write paint_regression_test.sh
-      status: todo
+      status: done
       description: 'Boot GeOS (background), launch paint.elf via socket, inject the
         rectangle-drawing sequence (fill on, d*11, color 3, s*10, color 2, a*10, color
         4, w*10, fill off), dump framebuffer, use Python/Pillow to assert pixel values.
@@ -499,7 +499,7 @@ phases:
       - tests/paint_regression_test.sh
     - id: f.1.2
       title: Verify test catches regressions
-      status: todo
+      status: done
       description: 'Revert each of the three paint.c fixes one at a time, confirm
         the test fails. Then re-apply fixes, confirm test passes.
 

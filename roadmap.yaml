@@ -8350,3 +8350,31 @@ version: 1.0.0
       scope_lines: 60
   scope_lines_total: 100
   test_target: 1
+
+- id: phase-169
+  title: "Fix Windowed Apps Crashing Due to Wrong Assembly Base Address"
+  status: planned
+  goal: "Windowed apps (launch <app> --window) should execute correctly with proper jump targets instead of crashing on the first instruction that uses a label address"
+  description: "Dogfood QA confirmed that ALL windowed apps crash within one frame tick. The root cause (not identified in phase-164) is an assembly base address mismatch. In main.rs around line 2627, the windowed launch code calls 'crate::assembler::assemble(&preprocessed, 0)' with base_addr=0, but then loads the bytecode at APP_CODE_BASE (0x4000). The assembler resolves JMP/CALL label targets as base_addr + offset (see assembler/mod.rs line 319: 'bytecode[*pos] = (base_addr + target) as u32'). So all jump targets point to addresses in the 0x0000-0x0FFF range (where the main VM code lives) instead of the 0x4000+ range where the app was actually loaded. The spawned process jumps to wrong code, executes garbage, and hits HALT or causes a fatal error within one tick. The fix is a single-line change: pass app_base as the second argument to assemble() instead of 0. This supersedes the incorrect diagnosis in phase-164 which suggested the programs 'don't initialize WINSYS' -- the real issue is purely an address relocation bug."
+  deliverables:
+  - name: "Fix assembly base address in windowed launch path"
+    description: "In main.rs, the windowed launch code (around line 2627) must compute app_base BEFORE calling assemble(), then pass app_base as the base_addr argument instead of 0. The code currently computes app_base after assembly, but it should be computed first. The slot finding and app_base computation can be moved up before the assemble() call, or a two-pass approach can be used where the first free slot is determined, then assemble is called with the correct base address."
+    status: todo
+    tasks:
+    - id: p169.d1.t1
+      title: "Move app_base computation before assemble() call in windowed launch"
+      status: todo
+      description: "In main.rs around line 2627, the code calls 'crate::assembler::assemble(&preprocessed, 0)'. Change it to first find the free slot and compute app_base = APP_CODE_BASE + slot_idx * APP_CODE_SIZE, then call 'crate::assembler::assemble(&preprocessed, app_base)'. This may require restructuring the code to move the slot-finding logic (currently at lines 2631-2636) before the assemble call, and handling the 'no free slot' case appropriately."
+      scope_lines: 30
+    - id: p169.d1.t2
+      title: "Verify window_list returns active windows after fix"
+      status: todo
+      description: "After fix, test: (1) launch plasma --window, (2) immediately query window_list, (3) expect non-empty JSON array with window id, title='plasma', pid, position. Also test with snake, fire, tetris, smart_term, painter. The dashboard should show the app running, not '[APP CLOSED: ...]'. Verify the window renders correctly by taking a screenshot after launch."
+      scope_lines: 40
+    - id: p169.d1.t3
+      title: "Check if non-windowed launch also has this base address issue"
+      status: todo
+      description: "The regular (non-windowed) launch path loads programs at address 0 (the standard VM memory space), so base_addr=0 is correct there. But verify this is the case by checking the non-windowed launch code path in main.rs. If any non-windowed launch also loads at a non-zero base, it needs the same fix."
+      scope_lines: 30
+  scope_lines_total: 100
+  test_target: 3
