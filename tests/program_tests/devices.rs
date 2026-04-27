@@ -651,3 +651,144 @@ fn test_ioctl_net_status() {
     vm.step();
     assert_eq!(vm.regs[0], 1, "Net status should be 1 (up)");
 }
+
+// ===================================================================
+// Phase 141: Network Packet Viewer (netmon.asm)
+// ===================================================================
+
+#[test]
+fn test_netmon_assembles() {
+    let source = std::fs::read_to_string("programs/netmon.asm").expect("netmon.asm should exist");
+    let result = assemble(&source, 0);
+    assert!(
+        result.is_ok(),
+        "netmon.asm should assemble: {:?}",
+        result.err()
+    );
+    let bc = &result.unwrap().pixels;
+    assert!(
+        bc.len() > 100,
+        "netmon.asm should produce substantial bytecode, got {} words",
+        bc.len()
+    );
+}
+
+#[test]
+fn test_netmon_runs_and_produces_frames() {
+    let source = std::fs::read_to_string("programs/netmon.asm").expect("netmon.asm should exist");
+    let asm = assemble(&source, 0).expect("netmon.asm should assemble");
+    let mut vm = Vm::new();
+    vm.mode = geometry_os::vm::CpuMode::Kernel;
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    let mut frames_seen = 0;
+    for _ in 0..5_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frames_seen += 1;
+            if frames_seen >= 3 {
+                break;
+            }
+        }
+    }
+    assert!(
+        frames_seen >= 1,
+        "netmon.asm should produce at least 1 frame, got {}",
+        frames_seen
+    );
+}
+
+#[test]
+fn test_netmon_reads_from_net_device() {
+    let source = std::fs::read_to_string("programs/netmon.asm").expect("netmon.asm should exist");
+    let asm = assemble(&source, 0).expect("netmon.asm should assemble");
+    let mut vm = Vm::new();
+    vm.mode = geometry_os::vm::CpuMode::Kernel;
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run for enough frames to trigger packet simulation and read
+    let mut frames = 0;
+    for _ in 0..10_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            frames += 1;
+            if frames >= 120 {
+                break;
+            } // ~2 seconds
+        }
+    }
+
+    // After running, packet count (r8) should be > 0 since simulation writes to net port
+    assert!(
+        vm.regs[8] > 0,
+        "netmon should have received packets (r8={})",
+        vm.regs[8]
+    );
+
+    // Buffer should have entries
+    // Check first entry at 0x5000 (data word)
+    let first_data = vm.ram[0x5000];
+    assert!(
+        first_data != 0 || vm.regs[8] > 1,
+        "Packet buffer should have data"
+    );
+}
+
+#[test]
+fn test_netmon_displays_title() {
+    let source = std::fs::read_to_string("programs/netmon.asm").expect("netmon.asm should exist");
+    let asm = assemble(&source, 0).expect("netmon.asm should assemble");
+    let mut vm = Vm::new();
+    vm.mode = geometry_os::vm::CpuMode::Kernel;
+    for (i, &word) in asm.pixels.iter().enumerate() {
+        if i < vm.ram.len() {
+            vm.ram[i] = word;
+        }
+    }
+    vm.pc = 0;
+    vm.halted = false;
+
+    // Run 1 frame
+    for _ in 0..5_000_000 {
+        if !vm.step() {
+            break;
+        }
+        if vm.frame_ready {
+            vm.frame_ready = false;
+            break;
+        }
+    }
+
+    // Screen should have non-black pixels (title bar at top)
+    let mut non_black = 0;
+    for y in 0..14 {
+        for x in 0..256 {
+            if vm.screen[y * 256 + x] != 0 {
+                non_black += 1;
+            }
+        }
+    }
+    assert!(
+        non_black > 10,
+        "Title bar should have visible pixels, found {}",
+        non_black
+    );
+}

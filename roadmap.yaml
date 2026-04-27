@@ -7157,7 +7157,7 @@ phases:
   _claimed_at: 1777224660
 - id: phase-141
   title: Network Packet Viewer
-  status: todo
+  status: done
   goal: 'A visual network packet monitor that displays UDP packets received via the
     /dev/net device, showing source/dest addresses, payload hex dumps, and packet
     rate statistics.
@@ -7176,17 +7176,17 @@ phases:
       Packet rate counter in footer. Uses FRAME-based animation loop.
 
       '
-    status: todo
+    status: done
     tasks:
     - id: p141.d1.t1
       title: Read packets from /dev/net via IOCTL
-      status: todo
+      status: done
     - id: p141.d1.t2
       title: Render packet log with hex dump
-      status: todo
+      status: done
     - id: p141.d1.t3
       title: Packet rate statistics
-      status: todo
+      status: done
     scope_lines: 150
   scope_lines_total: 75890
   test_target: 495
@@ -8019,6 +8019,44 @@ phases:
     The kernel isn't stuck -- it's just slow. More instruction budget is the fix.
   - 21 ECALLs in 20M instructions looked like a hang but was actually the kernel
     creating page tables. Sampling PCs revealed create_pgd_mapping loop.
+- id: phase-161
+  title: "Fix CLINT MTIP Regression in sync_mip (3 Failing Tests)"
+  status: planned
+  goal: "Restore M-mode timer interrupts by fixing sync_mip to set MTIP alongside STIP, unbreaking 3 regression tests introduced by OpenSBI timer forwarding."
+  description: "The Phase-160 OpenSBI emulation in bus.rs sync_mip() unconditionally clears MTIP (bit 7) and only sets STIP (bit 5). This was done to forward timer interrupts to S-mode for Linux boot, but it breaks M-mode timer interrupt tests that expect MTIP to be set when mtime >= mtimecmp. Four tests are failing: test_clint_timer_interrupt_via_vm_step (clint.rs:40), test_clint_timer_trap_and_mret (sv32_interrupt.rs:63), test_riscvvm_step_drives_timer_interrupt (sv32_interrupt.rs:275), test_supervisor_timer_with_delegation (sv32_interrupt.rs:284)."
+  deliverables:
+  - name: "Fix sync_mip to set both MTIP and STIP when timer is pending"
+    description: "In src/riscv/bus.rs sync_mip(), when timer_pending is true, set BOTH MTIP (bit 7) AND STIP (bit 5). The OpenSBI emulation that clears MTIP should only happen in the Linux boot path, not in the general-purpose VM. The cpu pending_interrupt() logic already prioritizes MTI over STI, so M-mode tests will see MTI and S-mode code will see STI."
+    status: todo
+    tasks:
+    - id: p161.d1.t1
+      title: "Modify sync_mip to set MTIP when timer fires"
+      status: todo
+      description: "In bus.rs sync_mip(), change the timer_pending branch to set both bit 7 (MTIP) and bit 5 (STIP): *mip |= (1 << 7) | (1 << 5); Remove the line that clears MTIP unconditionally."
+      scope_files:
+      - src/riscv/bus.rs
+      scope_lines: 20
+    - id: p161.d1.t2
+      title: "Verify Linux boot still works with MTIP set"
+      status: todo
+      description: "Run the Linux boot test to ensure the kernel still reaches idle. The kernel runs in S-mode and the pending_interrupt() function checks STI for S-mode, so setting MTIP should not interfere with S-mode timer delivery."
+      scope_files:
+      - src/riscv/tests.rs
+      scope_lines: 20
+  - name: "Verify the 4 failing CLINT timer tests pass"
+    description: "These tests must pass after the fix: test_clint_timer_interrupt_via_vm_step (M-mode timer delivery), test_clint_timer_trap_and_mret (timer trap + MRET), test_riscvvm_step_drives_timer_interrupt (step-level timer interrupt), test_supervisor_timer_with_delegation (S-mode timer with mideleg)."
+    status: todo
+    tasks:
+    - id: p161.d2.t1
+      title: "Run cargo test --test riscv_tests and verify 0 failures"
+      status: todo
+      description: "Run the full riscv_tests suite and confirm all 146 tests pass with 0 failures."
+      scope_files:
+      - tests/riscv_tests/clint.rs
+      - tests/riscv_tests/sv32_interrupt.rs
+      scope_lines: 30
+  scope_lines_total: 70
+  test_target: 1574
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0
