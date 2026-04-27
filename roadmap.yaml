@@ -8108,10 +8108,10 @@ phases:
   - 21 ECALLs in 20M instructions looked like a hang but was actually the kernel creating
     page tables. Sampling PCs revealed create_pgd_mapping loop.
   _claimed_by: worker-0
-  _claimed_at: 1777252599
+  _claimed_at: 1777256886
 - id: phase-161
   title: Fix CLINT MTIP Regression in sync_mip (3 Failing Tests)
-  status: in_progress
+  status: done
   goal: Restore M-mode timer interrupts by fixing sync_mip to set MTIP alongside STIP,
     unbreaking 3 regression tests introduced by OpenSBI timer forwarding.
   description: 'The Phase-160 OpenSBI emulation in bus.rs sync_mip() unconditionally
@@ -8127,11 +8127,11 @@ phases:
       only happen in the Linux boot path, not in the general-purpose VM. The cpu pending_interrupt()
       logic already prioritizes MTI over STI, so M-mode tests will see MTI and S-mode
       code will see STI.
-    status: todo
+    status: done
     tasks:
     - id: p161.d1.t1
       title: Modify sync_mip to set MTIP when timer fires
-      status: todo
+      status: done
       description: 'In bus.rs sync_mip(), change the timer_pending branch to set both
         bit 7 (MTIP) and bit 5 (STIP): *mip |= (1 << 7) | (1 << 5); Remove the line
         that clears MTIP unconditionally.'
@@ -8140,7 +8140,7 @@ phases:
       scope_lines: 20
     - id: p161.d1.t2
       title: Verify Linux boot still works with MTIP set
-      status: todo
+      status: done
       description: Run the Linux boot test to ensure the kernel still reaches idle.
         The kernel runs in S-mode and the pending_interrupt() function checks STI
         for S-mode, so setting MTIP should not interfere with S-mode timer delivery.
@@ -8152,11 +8152,11 @@ phases:
       (M-mode timer delivery), test_clint_timer_trap_and_mret (timer trap + MRET),
       test_riscvvm_step_drives_timer_interrupt (step-level timer interrupt), test_supervisor_timer_with_delegation
       (S-mode timer with mideleg).'
-    status: todo
+    status: done
     tasks:
     - id: p161.d2.t1
       title: Run cargo test --test riscv_tests and verify 0 failures
-      status: todo
+      status: done
       description: Run the full riscv_tests suite and confirm all 146 tests pass with
         0 failures.
       scope_files:
@@ -8165,8 +8165,6 @@ phases:
       scope_lines: 30
   scope_lines_total: 70
   test_target: 1574
-  _claimed_by: worker-0
-  _claimed_at: 1777252766
 - id: phase-162
   title: Terminal Polish -- Scrollback and Visual Refinements
   status: in_progress
@@ -8209,7 +8207,7 @@ phases:
   scope_lines_total: 570
   test_target: 10
   _claimed_by: worker-0
-  _claimed_at: 1777253749
+  _claimed_at: 1777258614
 project_url: https://github.com/tdw419/geometry-os
 title: Geometry OS Roadmap
 version: 1.0.0
