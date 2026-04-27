@@ -11,6 +11,9 @@
 //   0x6040_0000 : control register
 //     Write 1 to flush/signal present
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 /// MMIO base address for the framebuffer.
 pub const FB_BASE: u64 = 0x6000_0000;
 /// Size of the pixel buffer in bytes (256 * 256 * 4).
@@ -25,12 +28,21 @@ pub const FB_WIDTH: usize = 256;
 /// Framebuffer height in pixels.
 pub const FB_HEIGHT: usize = 256;
 
+/// Callback type fired when guest writes to the control register (fb_present).
+/// Receives a reference to the pixel buffer for display sync.
+pub type PresentCallback = Rc<RefCell<dyn FnMut(&[u32])>>;
+
 /// MMIO Framebuffer device.
 pub struct Framebuffer {
     /// 256x256 RGBA pixel buffer (256KB).
     pub pixels: Vec<u32>,
     /// Set when guest writes 1 to the control register.
     pub present_flag: bool,
+    /// Optional callback fired on fb_present for live display bridge.
+    /// When the guest writes 1 to the control register, this callback
+    /// is invoked with the current pixel buffer so the host can sync
+    /// to its display surface (Geometry OS screen, PNG dump, etc).
+    pub on_present: Option<PresentCallback>,
 }
 
 impl Default for Framebuffer {
@@ -44,6 +56,16 @@ impl Framebuffer {
         Self {
             pixels: vec![0u32; FB_WIDTH * FB_HEIGHT],
             present_flag: false,
+            on_present: None,
+        }
+    }
+
+    /// Create a framebuffer with a live present callback.
+    pub fn with_callback(cb: PresentCallback) -> Self {
+        Self {
+            pixels: vec![0u32; FB_WIDTH * FB_HEIGHT],
+            present_flag: false,
+            on_present: Some(cb),
         }
     }
 
@@ -76,6 +98,10 @@ impl Framebuffer {
             // Control register: bit 0 = present/flush
             if val & 1 != 0 {
                 self.present_flag = true;
+                // Fire the live display callback if registered
+                if let Some(ref cb) = self.on_present {
+                    cb.borrow_mut()(&self.pixels);
+                }
             }
             return;
         }

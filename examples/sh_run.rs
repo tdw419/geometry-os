@@ -3,12 +3,17 @@
 // Boots a bare-metal ELF (sh.elf), pipes host terminal stdin to UART RX,
 // drains UART TX to host stdout. Very lightweight: 1MB RAM, no Linux kernel.
 //
+// Live rendering: when the guest calls fb_present (writes to 0x6040_0000),
+// the framebuffer is dumped to framebuf_live_NNNN.png in real-time.
+//
 // Usage: cargo run --release --example sh_run
 //     or: cargo run --release --example sh_run -- /path/to/custom.elf
 
 use geometry_os::riscv::{loader, RiscvVm};
+use std::cell::RefCell;
 use std::fs;
 use std::io::{self, Read, Write};
+use std::rc::Rc;
 
 fn main() {
     // Pick ELF file: first non-dash arg, or default sh.elf
@@ -24,8 +29,61 @@ fn main() {
         std::process::exit(1);
     });
 
+    // Frame counter for live PNG dumps
+    let frame_counter = Rc::new(RefCell::new(0u32));
+
+    // Create the present callback -- dumps a PNG each time guest calls fb_present
+    let fc = frame_counter.clone();
+    let present_cb: geometry_os::riscv::framebuf::PresentCallback = Rc::new(RefCell::new(
+        move |pixels: &[u32]| {
+            use geometry_os::riscv::framebuf::{FB_WIDTH, FB_HEIGHT};
+            let frame = {
+                let mut n = fc.borrow_mut();
+                *n += 1;
+                *n
+            };
+            let any = pixels.iter().any(|&p| p != 0);
+            if !any {
+                return; // Skip empty frames
+            }
+            let out_path = format!("framebuf_live_{:04}.png", frame);
+            let file = match std::fs::File::create(&out_path) {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("frame {}: failed to create {}: {}", frame, out_path, e);
+                    return;
+                }
+            };
+            let mut encoder = png::Encoder::new(file, FB_WIDTH as u32, FB_HEIGHT as u32);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = match encoder.write_header() {
+                Ok(w) => w,
+                Err(e) => {
+                    eprintln!("frame {}: png header error: {}", frame, e);
+                    return;
+                }
+            };
+            let mut rgba = vec![0u8; FB_WIDTH * FB_HEIGHT * 4];
+            for (i, &pixel) in pixels.iter().enumerate() {
+                let bytes = pixel.to_be_bytes();
+                rgba[i * 4 + 0] = bytes[0]; // R
+                rgba[i * 4 + 1] = bytes[1]; // G
+                rgba[i * 4 + 2] = bytes[2]; // B
+                rgba[i * 4 + 3] = bytes[3]; // A
+            }
+            match writer.write_image_data(&rgba) {
+                Ok(()) => eprintln!("frame {}: saved {}", frame, out_path),
+                Err(e) => eprintln!("frame {}: png write error: {}", frame, e),
+            }
+        },
+    ));
+
     // Create VM with 1MB RAM at 0x8000_0000
     let mut vm = RiscvVm::new(1024 * 1024);
+
+    // Wire up the live present callback
+    vm.bus.framebuf.on_present = Some(present_cb);
 
     // Load ELF into bus memory
     let load_info = loader::load_elf(&mut vm.bus, &elf_data).unwrap_or_else(|e| {
@@ -46,7 +104,6 @@ fn main() {
     // Set up non-blocking stdin
     let stdin = io::stdin();
     let mut stdin_handle = stdin.lock();
-    // On Unix, set stdin to raw mode for character-at-a-time input
     #[cfg(unix)]
     {
         use std::os::unix::io::AsRawFd;
@@ -79,7 +136,6 @@ fn main() {
             match stdin_handle.read(&mut input_buf) {
                 Ok(n) => {
                     for &b in &input_buf[..n] {
-                        // Map Ctrl+C to shutdown
                         if b == 0x03 {
                             eprintln!("\nCaught Ctrl+C, shutting down...");
                             shutdown = true;
@@ -114,7 +170,10 @@ fn main() {
                     break;
                 }
                 geometry_os::riscv::cpu::StepResult::Shutdown => {
-                    eprintln!("\n[Guest requested shutdown after {} instructions]", total_instructions);
+                    eprintln!(
+                        "\n[Guest requested shutdown after {} instructions]",
+                        total_instructions
+                    );
                     shutdown = true;
                     break;
                 }
@@ -131,39 +190,33 @@ fn main() {
             }
             total_instructions += 1;
 
-            // Check for shutdown requested via SBI
             if vm.bus.sbi.shutdown_requested {
-                eprintln!("\n[Guest requested shutdown after {} instructions]", total_instructions);
+                eprintln!(
+                    "\n[Guest requested shutdown after {} instructions]",
+                    total_instructions
+                );
                 shutdown = true;
                 break;
             }
         }
 
         if shutdown {
-            // Final drain before exiting -- only use console_output
-            // (uart.tx_buf is a duplicate of what SBI already pushed there)
             let sbi_out: Vec<u8> = vm.bus.sbi.console_output.drain(..).collect();
             if !sbi_out.is_empty() {
                 let _ = stdout_handle.write_all(&sbi_out);
                 let _ = stdout_handle.flush();
             }
-            let _ = vm.bus.uart.drain_tx(); // clear duplicate
+            let _ = vm.bus.uart.drain_tx();
             break;
         }
 
-        // 3. Drain console output to host stdout.
-        // SBI putchar writes to BOTH uart.tx_buf and console_output,
-        // so we only drain one to avoid duplicating output.
+        // 3. Drain console output
         let sbi_out: Vec<u8> = vm.bus.sbi.console_output.drain(..).collect();
         if !sbi_out.is_empty() {
             stdout_handle.write_all(&sbi_out).unwrap();
             stdout_handle.flush().unwrap();
         }
-        // Also drain uart.tx_buf in case guest wrote directly to UART MMIO
-        // (not via SBI). Skip bytes already captured by console_output.
         let tx_bytes = vm.bus.uart.drain_tx();
-        // tx_bytes contains everything SBI wrote too, so only drain what's new
-        // For now just clear it since SBI output is already captured above.
         drop(tx_bytes);
     }
 
@@ -171,14 +224,13 @@ fn main() {
     #[cfg(unix)]
     {
         // Terminal will be restored by the OS when the process exits.
-        // For clean restoration, we'd save/restore termios, but _exit is simpler.
     }
 
     eprintln!("\nTotal instructions: {}", total_instructions);
     eprintln!("Final PC: 0x{:08X}", vm.cpu.pc);
 
-    // Dump MMIO framebuffer (256x256 at 0x6000_0000) if guest wrote any pixels
-    use geometry_os::riscv::framebuf::{FB_WIDTH, FB_HEIGHT};
+    // Final framebuffer dump (always, even if no present was called)
+    use geometry_os::riscv::framebuf::{FB_HEIGHT, FB_WIDTH};
     let mmio_fb = &vm.bus.framebuf.pixels;
     let any_mmio = mmio_fb.iter().any(|&p| p != 0);
     if any_mmio {
@@ -190,14 +242,16 @@ fn main() {
         let mut writer = encoder.write_header().expect("png header");
         let mut rgba = vec![0u8; FB_WIDTH * FB_HEIGHT * 4];
         for (i, &pixel) in mmio_fb.iter().enumerate() {
-            // Color format: [31:24]=R, [23:16]=G, [15:8]=B, [7:0]=A
             let bytes = pixel.to_be_bytes();
-            rgba[i * 4 + 0] = bytes[0]; // R
-            rgba[i * 4 + 1] = bytes[1]; // G
-            rgba[i * 4 + 2] = bytes[2]; // B
-            rgba[i * 4 + 3] = bytes[3]; // A
+            rgba[i * 4 + 0] = bytes[0];
+            rgba[i * 4 + 1] = bytes[1];
+            rgba[i * 4 + 2] = bytes[2];
+            rgba[i * 4 + 3] = bytes[3];
         }
         writer.write_image_data(&rgba).expect("write png");
-        eprintln!("MMIO framebuffer saved to {} ({}x{})", out_path, FB_WIDTH, FB_HEIGHT);
+        eprintln!(
+            "MMIO framebuffer saved to {} ({}x{})",
+            out_path, FB_WIDTH, FB_HEIGHT
+        );
     }
 }
