@@ -11,9 +11,10 @@ use std::fs;
 use std::io::{self, Read, Write};
 
 fn main() {
-    // Pick ELF file: CLI arg or default sh.elf
+    // Pick ELF file: first non-dash arg, or default sh.elf
     let elf_path = std::env::args()
-        .nth(1)
+        .skip(1)
+        .find(|a| !a.starts_with('-'))
         .unwrap_or_else(|| "examples/riscv-hello/sh.elf".into());
 
     eprintln!("Loading {}...", elf_path);
