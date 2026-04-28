@@ -8462,7 +8462,7 @@ version: 1.0.0
 
 - id: phase-173
   title: "Fix 3 Failing Lib Tests: SBI, Pause/Resume, Surface Direct Read"
-  status: planned
+  status: done
   goal: "All 1581 lib tests should pass (currently 1578 pass, 3 fail)"
   description: "Dogfood QA found 3 failing lib tests (1578 passed, 3 failed). All are untracked regressions. (1) test_sbi_v02_console_putchar (sbi.rs:450): assertion left=0xFFFFFFFF right=0 -- test passes SBI_CONSOLE_GETCHAR (2) as extension ID but should pass SBI_CONSOLE_PUTCHAR (1) since the test is for putchar. The GETCHAR path returns -1 (no char in UART). (2) test_pause_resume (live.rs:452): SendError when sending on a channel to the live VM thread -- likely a race condition where the thread hasn't started or already exited. (3) test_surface_direct_read (tests.rs:1177): expects VFS count=4 but gets count=6 -- the VFS pixel surface has accumulated extra entries from cross-session persistence (Phase H), stale test files in .geometry_os/fs/, or test contamination between runs."
   deliverables:
@@ -8495,3 +8495,26 @@ version: 1.0.0
       scope_lines: 20
   scope_lines_total: 65
   test_target: 3
+
+- id: phase-174
+  title: "Fix geo_dogfood_qa.py Timeout: Script Exceeds 120s Cron Limit"
+  status: done
+  goal: "The preflight script must complete within 120 seconds to avoid cron kill"
+  description: "The geo_dogfood_qa.py script timed out again (Apr 27 19:02) because cargo test --release takes 5+ minutes. The script has an internal 300s timeout for cargo test but the cron job kills the entire script at 120s. This means (a) the script never writes STATUS output, (b) a stale cargo test process is left running consuming 100% CPU and 32GB RAM, and (c) the cron agent has no data to work with. The fix: run 'cargo test --lib -- --test-threads=8' instead of 'cargo test --release -- --test-threads=8'. Lib tests are ~800 tests and complete in ~30s vs the full 3656 test suite. Also add atexit cleanup to kill test processes."
+  deliverables:
+  - name: "Preflight script completes in under 60 seconds"
+    description: "Change check_build_status() in geo_dogfood_qa.py to run 'cargo test --lib -- --test-threads=8' instead of 'cargo test --release -- --test-threads=8'. Reduce internal timeout from 300s to 90s. Add atexit handler that kills any geometry_os test runner processes. This ensures the script finishes well within the 120s cron limit."
+    status: done
+    tasks:
+    - id: p174.d1.t1
+      title: "Change cargo test --release to cargo test --lib in preflight"
+      status: done
+      description: "In geo_dogfood_qa.py check_build_status(), change ['cargo', 'test', '--release', '--', '--test-threads=8'] to ['cargo', 'test', '--lib', '--', '--test-threads=8']. Also reduce timeout from 300 to 90 seconds."
+      scope_lines: 5
+    - id: p174.d1.t2
+      title: "Add atexit cleanup for stale test runners"
+      status: done
+      description: "Add atexit handler at the top of main() that kills any target/debug/deps/geometry_os-* test runner processes. Also kill stale runners at script start."
+      scope_lines: 10
+  scope_lines_total: 15
+  test_target: 1
