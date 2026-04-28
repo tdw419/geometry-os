@@ -2723,6 +2723,12 @@ fn main() {
 
                                                         // Set window title from app name
                                                         let title_base = 0x7900 + slot_idx * 32;
+                                                        // Zero-fill the 32-byte title region first to prevent stale bytes
+                                                        for j in 0..32 {
+                                                            if title_base + j < ram_len {
+                                                                vm.ram[title_base + j] = 0;
+                                                            }
+                                                        }
                                                         for (j, b) in app_name.bytes().enumerate() {
                                                             if title_base + j < ram_len {
                                                                 vm.ram[title_base + j] = b as u32;
@@ -4482,6 +4488,12 @@ fn main() {
                                                                 );
                                                             // Set window title from app name
                                                             let title_base = 0x7900 + slot_idx * 32;
+                                                            // Zero-fill the 32-byte title region first to prevent stale bytes
+                                                            for j in 0..32 {
+                                                                if title_base + j < ram_len {
+                                                                    vm.ram[title_base + j] = 0;
+                                                                }
+                                                            }
                                                             for (j, b) in
                                                                 app_name.bytes().enumerate()
                                                             {

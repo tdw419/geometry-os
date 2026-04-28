@@ -8309,6 +8309,7 @@ version: 1.0.0
   description: "Dogfood QA found that two buildings on the desktop reference non-existent program files: building 'linux' at (70,130) tries to load programs/linux.asm but the actual file is programs/linux_building.asm, and building 'host' at (140,80) tries to load programs/host.asm but the actual file is programs/host_term.asm. The launch command searches for programs/<building_name>.asm, so the building names must match the filenames. Either rename the buildings in world_desktop.asm to match the files, or create symlink/alias files. The error output is: '[no program file for linux: No such file or directory]' and '[no program file for host: No such file or directory]'."
   deliverables:
   - name: "All 16 desktop buildings launch successfully"
+    status: done
     description: "Ensure buildings 'linux' and 'host' resolve to their correct program files (linux_building.asm and host_term.asm). Options: (a) rename building entries in world_desktop.asm from 'linux' to 'linux_building' and 'host' to 'host_term', or (b) add launch alias mapping in main.rs so 'linux'->'linux_building' and 'host'->'host_term', or (c) create programs/linux.asm and programs/host.asm as symlinks/wrappers. Verify with 'launch linux' and 'launch host' via socket."
     status: todo
     tasks:
@@ -8416,7 +8417,7 @@ version: 1.0.0
 
 - id: phase-171
   title: "Fix Window Title RAM Not Zeroed on First Windowed Launch"
-  status: planned
+  status: done
   goal: "Window titles should always show the clean app name, not stale bytes from previous sessions"
   description: "Dogfood QA found that the first windowed launch of 'plasma' shows title 'plasmaX<' instead of 'plasma'. The second launch shows the correct 'plasma'. The title is stored at RAM address 0x7900 + slot*32, and the windowed launch code writes the app name bytes but does NOT null-terminate or zero-fill the 32-byte title region first. If the previous session left stale bytes at 0x7900+5 (where 'X' and '<' are), those get concatenated with the new title. The fix is to zero the 32-byte title region before writing the app name, or write a null terminator after the name."
   deliverables:
